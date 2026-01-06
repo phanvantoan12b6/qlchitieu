@@ -7,6 +7,8 @@ void main() {
 }
 
 class ExpenseTrackerApp extends StatelessWidget {
+  const ExpenseTrackerApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -43,10 +45,31 @@ class Transaction {
     required this.category,
     required this.isExpense,
   });
+
+  Transaction copyWith({
+    String? title,
+    double? amount,
+    DateTime? date,
+    String? category,
+    bool? isExpense,
+  }) {
+    return Transaction(
+      id: id,
+      title: title ?? this.title,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      category: category ?? this.category,
+      isExpense: isExpense ?? this.isExpense,
+    );
+  }
 }
+
+enum DateFilter { all, today, week, month, year }
 
 // Login Page
 class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -59,7 +82,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _isLogin = true;
+  bool _isLoading = false;
+
+  // Danh sách tài khoản mẫu (username: password)
+  static final Map<String, String> _accounts = {
+    'admin': 'admin123',
+    'user': 'user123',
+    'demo': 'demo123',
+  };
 
   @override
   void initState() {
@@ -93,21 +125,82 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     _slideController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _handleAuth() {
-    if (_usernameController.text.isNotEmpty &&
-        _passwordController.text.isNotEmpty) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => HomePage(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-        ),
-      );
+  void _showMessage(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  void _handleAuth() async {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
+
+    // Kiểm tra các trường có rỗng không
+    if (username.isEmpty || password.isEmpty) {
+      _showMessage('Vui lòng điền đầy đủ thông tin', isError: true);
+      return;
     }
+
+    setState(() => _isLoading = true);
+
+    // Giả lập delay network
+    await Future.delayed(Duration(milliseconds: 800));
+
+    if (_isLogin) {
+      // Xử lý đăng nhập
+      if (_accounts.containsKey(username)) {
+        if (_accounts[username] == password) {
+          _showMessage('Đăng nhập thành công!');
+          await Future.delayed(Duration(milliseconds: 500));
+
+          Navigator.of(context).pushReplacement(
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  HomePage(),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+            ),
+          );
+        } else {
+          _showMessage('Mật khẩu không đúng', isError: true);
+        }
+      } else {
+        _showMessage('Tài khoản không tồn tại', isError: true);
+      }
+    } else {
+      // Xử lý đăng ký
+      if (password.length < 6) {
+        _showMessage('Mật khẩu phải có ít nhất 6 ký tự', isError: true);
+      } else if (password != confirmPassword) {
+        _showMessage('Mật khẩu xác nhận không khớp', isError: true);
+      } else if (_accounts.containsKey(username)) {
+        _showMessage('Tên đăng nhập đã tồn tại', isError: true);
+      } else {
+        // Đăng ký thành công
+        _accounts[username] = password;
+        _showMessage('Đăng ký thành công! Vui lòng đăng nhập');
+        setState(() {
+          _isLogin = true;
+          _passwordController.clear();
+          _confirmPasswordController.clear();
+        });
+      }
+    }
+
+    setState(() => _isLoading = false);
   }
 
   @override
@@ -218,9 +311,37 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
-                      SizedBox(height: 30),
+                      SizedBox(height: 20),
+                      if (!_isLogin)
+                        Column(
+                          children: [
+                            TextField(
+                              controller: _confirmPasswordController,
+                              obscureText: true,
+                              decoration: InputDecoration(
+                                labelText: 'Xác nhận mật khẩu',
+                                prefixIcon: Icon(
+                                  Icons.lock_outline,
+                                  color: Color(0xFF667eea),
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: Color(0xFF667eea),
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 20),
+                          ],
+                        ),
+                      SizedBox(height: 10),
                       ElevatedButton(
-                        onPressed: _handleAuth,
+                        onPressed: _isLoading ? null : _handleAuth,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Color(0xFF667eea),
                           padding: EdgeInsets.symmetric(vertical: 16),
@@ -229,20 +350,32 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                           ),
                           minimumSize: Size(double.infinity, 50),
                         ),
-                        child: Text(
-                          _isLogin ? 'ĐĂNG NHẬP' : 'ĐĂNG KÝ',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: _isLoading
+                            ? SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                _isLogin ? 'ĐĂNG NHẬP' : 'ĐĂNG KÝ',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                       SizedBox(height: 15),
                       TextButton(
                         onPressed: () {
                           setState(() {
                             _isLogin = !_isLogin;
+                            _confirmPasswordController.clear();
                           });
                         },
                         child: Text(
@@ -252,6 +385,48 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                           style: TextStyle(color: Color(0xFF667eea)),
                         ),
                       ),
+                      if (_isLogin) ...[
+                        SizedBox(height: 20),
+                        Container(
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    color: Colors.blue,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Tài khoản demo',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue.shade900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'admin / admin123\nuser / user123\ndemo / demo123',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.blue.shade800,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -266,6 +441,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
 // Home Page
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
   @override
   _HomePageState createState() => _HomePageState();
 }
@@ -274,6 +451,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   List<Transaction> _transactions = [];
   int _selectedIndex = 0;
   double _budget = 5000000;
+  DateFilter _dateFilter = DateFilter.all;
 
   late AnimationController _fabController;
   late Animation<double> _fabAnimation;
@@ -317,6 +495,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         category: 'Ăn uống',
         isExpense: true,
       ),
+      Transaction(
+        id: '4',
+        title: 'Cafe',
+        amount: 50000,
+        date: DateTime.now(),
+        category: 'Ăn uống',
+        isExpense: true,
+      ),
+      Transaction(
+        id: '5',
+        title: 'Xăng xe',
+        amount: 200000,
+        date: DateTime.now().subtract(Duration(days: 35)),
+        category: 'Di chuyển',
+        isExpense: true,
+      ),
     ];
   }
 
@@ -326,14 +520,38 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  List<Transaction> get _filteredTransactions {
+    final now = DateTime.now();
+    switch (_dateFilter) {
+      case DateFilter.today:
+        return _transactions.where((t) {
+          return t.date.year == now.year &&
+              t.date.month == now.month &&
+              t.date.day == now.day;
+        }).toList();
+      case DateFilter.week:
+        final weekAgo = now.subtract(Duration(days: 7));
+        return _transactions.where((t) => t.date.isAfter(weekAgo)).toList();
+      case DateFilter.month:
+        return _transactions.where((t) {
+          return t.date.year == now.year && t.date.month == now.month;
+        }).toList();
+      case DateFilter.year:
+        return _transactions.where((t) => t.date.year == now.year).toList();
+      case DateFilter.all:
+      default:
+        return _transactions;
+    }
+  }
+
   double get totalIncome {
-    return _transactions
+    return _filteredTransactions
         .where((t) => !t.isExpense)
         .fold(0.0, (sum, t) => sum + t.amount);
   }
 
   double get totalExpense {
-    return _transactions
+    return _filteredTransactions
         .where((t) => t.isExpense)
         .fold(0.0, (sum, t) => sum + t.amount);
   }
@@ -343,6 +561,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void _addTransaction(Transaction transaction) {
     setState(() {
       _transactions.insert(0, transaction);
+    });
+  }
+
+  void _updateTransaction(Transaction transaction) {
+    setState(() {
+      final index = _transactions.indexWhere((t) => t.id == transaction.id);
+      if (index != -1) {
+        _transactions[index] = transaction;
+      }
     });
   }
 
@@ -359,6 +586,34 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       backgroundColor: Colors.transparent,
       builder: (context) => AddTransactionSheet(onAdd: _addTransaction),
     );
+  }
+
+  void _showEditTransactionDialog(Transaction transaction) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => EditTransactionSheet(
+        transaction: transaction,
+        onUpdate: _updateTransaction,
+      ),
+    );
+  }
+
+  String _getFilterLabel() {
+    switch (_dateFilter) {
+      case DateFilter.today:
+        return 'Hôm nay';
+      case DateFilter.week:
+        return 'Tuần này';
+      case DateFilter.month:
+        return 'Tháng này';
+      case DateFilter.year:
+        return 'Năm này';
+      case DateFilter.all:
+      default:
+        return 'Tất cả';
+    }
   }
 
   @override
@@ -388,6 +643,25 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ),
         elevation: 0,
         actions: [
+          if (_selectedIndex == 1)
+            PopupMenuButton<DateFilter>(
+              icon: Icon(Icons.filter_list, color: Colors.white),
+              onSelected: (filter) {
+                setState(() {
+                  _dateFilter = filter;
+                });
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(value: DateFilter.all, child: Text('Tất cả')),
+                PopupMenuItem(value: DateFilter.today, child: Text('Hôm nay')),
+                PopupMenuItem(value: DateFilter.week, child: Text('Tuần này')),
+                PopupMenuItem(
+                  value: DateFilter.month,
+                  child: Text('Tháng này'),
+                ),
+                PopupMenuItem(value: DateFilter.year, child: Text('Năm này')),
+              ],
+            ),
           IconButton(
             icon: Icon(Icons.logout, color: Colors.white),
             onPressed: () {
@@ -570,24 +844,80 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildTransactionsList(bool isSmallScreen) {
-    return ListView.builder(
-      padding: EdgeInsets.all(16),
-      itemCount: _transactions.length,
-      itemBuilder: (context, index) =>
-          _buildTransactionItem(_transactions[index]),
+    return Column(
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: Colors.grey[100],
+          child: Row(
+            children: [
+              Icon(Icons.filter_list, color: Color(0xFF667eea), size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Lọc: ${_getFilterLabel()}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF667eea),
+                ),
+              ),
+              Spacer(),
+              Text(
+                '${_filteredTransactions.length} giao dịch',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _filteredTransactions.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inbox, size: 80, color: Colors.grey[300]),
+                      SizedBox(height: 16),
+                      Text(
+                        'Không có giao dịch nào',
+                        style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.all(16),
+                  itemCount: _filteredTransactions.length,
+                  itemBuilder: (context, index) =>
+                      _buildTransactionItem(_filteredTransactions[index]),
+                ),
+        ),
+      ],
     );
   }
 
   Widget _buildTransactionItem(Transaction transaction) {
     return Dismissible(
       key: Key(transaction.id),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.endToStart) {
+          return true; // Delete
+        } else if (direction == DismissDirection.startToEnd) {
+          _showEditTransactionDialog(transaction);
+          return false; // Don't delete, just edit
+        }
+        return false;
+      },
       background: Container(
+        color: Colors.blue,
+        alignment: Alignment.centerLeft,
+        padding: EdgeInsets.only(left: 20),
+        child: Icon(Icons.edit, color: Colors.white),
+      ),
+      secondaryBackground: Container(
         color: Colors.red,
         alignment: Alignment.centerRight,
         padding: EdgeInsets.only(right: 20),
         child: Icon(Icons.delete, color: Colors.white),
       ),
-      direction: DismissDirection.endToStart,
       onDismissed: (_) => _deleteTransaction(transaction.id),
       child: Card(
         margin: EdgeInsets.only(bottom: 12),
@@ -630,39 +960,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildStatistics(bool isSmallScreen) {
-    final categoryData = <String, double>{};
-    for (var t in _transactions.where((t) => t.isExpense)) {
-      categoryData[t.category] = (categoryData[t.category] ?? 0) + t.amount;
-    }
-
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Thống kê chi tiêu',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 20),
-          Container(
-            height: 250,
-            child: CustomPaint(
-              painter: PieChartPainter(categoryData),
-              child: Center(),
-            ),
-          ),
-          SizedBox(height: 20),
-          ...categoryData.entries.map(
-            (e) => _buildCategoryItem(e.key, e.value, totalExpense),
-          ),
-        ],
-      ),
-    );
+    return StatisticsPage(transactions: _transactions);
   }
 
   Widget _buildCategoryItem(String category, double amount, double total) {
-    final percentage = (amount / total * 100).toStringAsFixed(1);
+    final percentage =
+        total > 0 ? (amount / total * 100).toStringAsFixed(1) : '0.0';
     return Container(
       margin: EdgeInsets.only(bottom: 12),
       padding: EdgeInsets.all(16),
@@ -705,7 +1008,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildBudget(bool isSmallScreen) {
-    final spentPercentage = (totalExpense / _budget * 100).clamp(0, 100);
+    final spentPercentage =
+        _budget > 0 ? (totalExpense / _budget * 100).clamp(0, 100) : 0.0;
 
     return SingleChildScrollView(
       padding: EdgeInsets.all(16),
@@ -770,20 +1074,36 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           SizedBox(height: 20),
           ElevatedButton(
             onPressed: () {
+              final controller = TextEditingController(
+                text: _budget.toString(),
+              );
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
                   title: Text('Đặt ngân sách'),
                   content: TextField(
+                    controller: controller,
                     keyboardType: TextInputType.number,
-                    decoration: InputDecoration(labelText: 'Số tiền'),
-                    onSubmitted: (value) {
-                      setState(() {
-                        _budget = double.tryParse(value) ?? _budget;
-                      });
-                      Navigator.pop(context);
-                    },
+                    decoration: InputDecoration(
+                      labelText: 'Số tiền',
+                      suffixText: '₫',
+                    ),
                   ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('Hủy'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _budget = double.tryParse(controller.text) ?? _budget;
+                        });
+                        Navigator.pop(context);
+                      },
+                      child: Text('Lưu'),
+                    ),
+                  ],
                 ),
               );
             },
@@ -810,7 +1130,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 class AddTransactionSheet extends StatefulWidget {
   final Function(Transaction) onAdd;
 
-  AddTransactionSheet({required this.onAdd});
+  const AddTransactionSheet({super.key, required this.onAdd});
 
   @override
   _AddTransactionSheetState createState() => _AddTransactionSheetState();
@@ -831,6 +1151,20 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     'Lương',
     'Khác',
   ];
+
+  Future<void> _selectDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -895,7 +1229,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             ),
             SizedBox(height: 15),
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              initialValue: _selectedCategory,
               decoration: InputDecoration(
                 labelText: 'Danh mục',
                 border: OutlineInputBorder(
@@ -906,6 +1240,23 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                   .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
                   .toList(),
               onChanged: (value) => setState(() => _selectedCategory = value!),
+            ),
+            SizedBox(height: 15),
+            InkWell(
+              onTap: () => _selectDate(context),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Ngày',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  suffixIcon: Icon(Icons.calendar_today),
+                ),
+                child: Text(
+                  DateFormat('dd/MM/yyyy').format(_selectedDate),
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
             ),
             SizedBox(height: 20),
             ElevatedButton(
@@ -968,7 +1319,224 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
   }
 }
 
+// Edit Transaction Sheet
+class EditTransactionSheet extends StatefulWidget {
+  final Transaction transaction;
+  final Function(Transaction) onUpdate;
+
+  const EditTransactionSheet({
+    super.key,
+    required this.transaction,
+    required this.onUpdate,
+  });
+
+  @override
+  _EditTransactionSheetState createState() => _EditTransactionSheetState();
+}
+
+class _EditTransactionSheetState extends State<EditTransactionSheet> {
+  late TextEditingController _titleController;
+  late TextEditingController _amountController;
+  late String _selectedCategory;
+  late bool _isExpense;
+  late DateTime _selectedDate;
+
+  final List<String> _categories = [
+    'Ăn uống',
+    'Mua sắm',
+    'Di chuyển',
+    'Giải trí',
+    'Lương',
+    'Khác',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.transaction.title);
+    _amountController = TextEditingController(
+      text: widget.transaction.amount.toString(),
+    );
+    _selectedCategory = widget.transaction.category;
+    _isExpense = widget.transaction.isExpense;
+    _selectedDate = widget.transaction.date;
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Sửa giao dịch',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(child: _buildTypeButton('Chi tiêu', true)),
+                SizedBox(width: 10),
+                Expanded(child: _buildTypeButton('Thu nhập', false)),
+              ],
+            ),
+            SizedBox(height: 20),
+            TextField(
+              controller: _titleController,
+              decoration: InputDecoration(
+                labelText: 'Tiêu đề',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            SizedBox(height: 15),
+            TextField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Số tiền',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                suffixText: '₫',
+              ),
+            ),
+            SizedBox(height: 15),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedCategory,
+              decoration: InputDecoration(
+                labelText: 'Danh mục',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              items: _categories
+                  .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                  .toList(),
+              onChanged: (value) => setState(() => _selectedCategory = value!),
+            ),
+            SizedBox(height: 15),
+            InkWell(
+              onTap: () => _selectDate(context),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Ngày',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  suffixIcon: Icon(Icons.calendar_today),
+                ),
+                child: Text(
+                  DateFormat('dd/MM/yyyy').format(_selectedDate),
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                if (_titleController.text.isNotEmpty &&
+                    _amountController.text.isNotEmpty) {
+                  widget.onUpdate(
+                    widget.transaction.copyWith(
+                      title: _titleController.text,
+                      amount: double.parse(_amountController.text),
+                      date: _selectedDate,
+                      category: _selectedCategory,
+                      isExpense: _isExpense,
+                    ),
+                  );
+                  Navigator.pop(context);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFF667eea),
+                padding: EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                minimumSize: Size(double.infinity, 50),
+              ),
+              child: Text(
+                'Cập nhật giao dịch',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeButton(String label, bool isExpense) {
+    final isSelected = _isExpense == isExpense;
+    return GestureDetector(
+      onTap: () => setState(() => _isExpense = isExpense),
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? Color(0xFF667eea) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : Colors.grey[700],
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // Pie Chart Painter
+
 class PieChartPainter extends CustomPainter {
   final Map<String, double> data;
   final List<Color> colors = [
@@ -988,6 +1556,8 @@ class PieChartPainter extends CustomPainter {
     final radius = math.min(size.width, size.height) / 2.5;
     final total = data.values.fold(0.0, (sum, value) => sum + value);
 
+    if (total == 0) return;
+
     double startAngle = -math.pi / 2;
     int colorIndex = 0;
 
@@ -1005,7 +1575,6 @@ class PieChartPainter extends CustomPainter {
         paint,
       );
 
-      // Draw outline
       final outlinePaint = Paint()
         ..color = Colors.white
         ..style = PaintingStyle.stroke
@@ -1023,7 +1592,6 @@ class PieChartPainter extends CustomPainter {
       colorIndex++;
     });
 
-    // Draw center circle for donut effect
     final centerPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
@@ -1033,4 +1601,142 @@ class PieChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(PieChartPainter oldDelegate) => true;
+}
+
+enum TimeFilter { week, month, year }
+
+enum TypeFilter { expense, income }
+
+class StatisticsPage extends StatefulWidget {
+  final List<Transaction> transactions;
+
+  const StatisticsPage({super.key, required this.transactions});
+
+  @override
+  State<StatisticsPage> createState() => _StatisticsPageState();
+}
+
+class _StatisticsPageState extends State<StatisticsPage> {
+  TimeFilter _timeFilter = TimeFilter.month;
+  TypeFilter _typeFilter = TypeFilter.expense;
+
+  Map<String, double> _filteredData() {
+    final now = DateTime.now();
+
+    bool inRange(Transaction t) {
+      if (_timeFilter == TimeFilter.week) {
+        return t.date.isAfter(now.subtract(const Duration(days: 7)));
+      }
+      if (_timeFilter == TimeFilter.month) {
+        return t.date.year == now.year && t.date.month == now.month;
+      }
+      return t.date.year == now.year;
+    }
+
+    final data = <String, double>{};
+
+    for (var t in widget.transactions) {
+      if (!inRange(t)) continue;
+      if (_typeFilter == TypeFilter.expense && !t.isExpense) continue;
+      if (_typeFilter == TypeFilter.income && t.isExpense) continue;
+
+      data[t.category] = (data[t.category] ?? 0) + t.amount;
+    }
+
+    return data;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _filteredData();
+    final total = data.values.fold(0.0, (a, b) => a + b);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Thống kê',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+
+          /// ===== TIME FILTER =====
+          SegmentedButton<TimeFilter>(
+            segments: const [
+              ButtonSegment(value: TimeFilter.week, label: Text('Tuần')),
+              ButtonSegment(value: TimeFilter.month, label: Text('Tháng')),
+              ButtonSegment(value: TimeFilter.year, label: Text('Năm')),
+            ],
+            selected: {_timeFilter},
+            onSelectionChanged: (v) {
+              setState(() => _timeFilter = v.first);
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          /// ===== TYPE FILTER =====
+          SegmentedButton<TypeFilter>(
+            segments: const [
+              ButtonSegment(value: TypeFilter.expense, label: Text('Chi tiêu')),
+              ButtonSegment(value: TypeFilter.income, label: Text('Thu nhập')),
+            ],
+            selected: {_typeFilter},
+            onSelectionChanged: (v) {
+              setState(() => _typeFilter = v.first);
+            },
+          ),
+
+          const SizedBox(height: 24),
+
+          /// ===== PIE CHART =====
+          if (data.isNotEmpty)
+            Center(
+              child: SizedBox(
+                width: 250,
+                height: 250,
+                child: CustomPaint(painter: PieChartPainter(data)),
+              ),
+            )
+          else
+            const Center(
+              child: Text(
+                'Không có dữ liệu',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+
+          const SizedBox(height: 24),
+
+          /// ===== DETAILS =====
+          ...data.entries.map((e) {
+            final percent =
+                total == 0 ? 0 : (e.value / total * 100).toStringAsFixed(1);
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                title: Text(e.key),
+                subtitle: Text('$percent%'),
+                trailing: Text(
+                  NumberFormat.currency(
+                    locale: 'vi',
+                    symbol: '₫',
+                  ).format(e.value),
+                  style: TextStyle(
+                    color: _typeFilter == TypeFilter.expense
+                        ? Colors.red
+                        : Colors.green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
 }
